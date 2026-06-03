@@ -236,6 +236,7 @@ import { useRoute } from 'vue-router'
 import Navbar from '../components/Navbar.vue'
 import { askQuestion as apiAsk, getConversationList, getConversationMessages, deleteConversation } from '../api/index.js'
 import { getAllDocs, searchDocs } from '../services/knowledgeBase.js'
+import { gsap } from '../plugins/gsap'
 import { marked } from 'marked'
 
 const route = useRoute()
@@ -517,6 +518,13 @@ async function scrollToBottom() {
 }
 
 onMounted(async () => {
+  // 入场动画：三栏依次滑入
+  nextTick(() => {
+    gsap.from('.chat-layout > .sidebar', { x: -20, opacity: 0, duration: 0.45, ease: 'power2.out' })
+    gsap.from('.chat-layout > .chat-main', { y: 16, opacity: 0, duration: 0.45, ease: 'power2.out', delay: 0.08 })
+    gsap.from('.chat-layout > .ref-panel', { x: 20, opacity: 0, duration: 0.45, ease: 'power2.out', delay: 0.15 })
+  })
+
   // 从后端加载会话历史
   try {
     const { data } = await getConversationList()

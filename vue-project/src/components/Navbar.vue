@@ -1,6 +1,6 @@
 <template>
   <nav class="navbar">
-    <div class="navbar-inner">
+    <div ref="navbarInnerRef" class="navbar-inner">
       <!-- Logo -->
       <router-link to="/" class="logo-group">
         <div class="logo-icon">
@@ -50,32 +50,103 @@
 
       <!-- 右侧操作 -->
       <div class="nav-actions">
-        <button class="icon-btn notification" aria-label="通知">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-          </svg>
-          <span class="notif-dot"></span>
-        </button>
-        <div class="user-menu">
-          <div class="user-info">
-            <span class="user-name">{{ user?.name || '用户' }}</span>
-            <span class="user-role">{{ user?.roleLabel || '' }}</span>
-          </div>
-          <div class="avatar" @click="showProfile = true" title="个人资料">
-            <img v-if="user?.avatar" :src="user.avatar" alt="" class="avatar-img" />
-            <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-              <circle cx="12" cy="7" r="4"/>
+        <!-- 通知 -->
+        <div class="action-wrap" ref="notifWrapRef">
+          <button class="icon-btn" :class="{ active: showNotif }" @click.stop="toggleNotif">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
             </svg>
-          </div>
-          <button class="logout-btn" @click="doLogout" title="退出登录">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-              <polyline points="16 17 21 12 16 7"/>
-              <line x1="21" y1="12" x2="9" y2="12"/>
-            </svg>
+            <span v-if="unreadCount" class="notif-dot">{{ unreadCount }}</span>
           </button>
+          <!-- 通知下拉 -->
+          <Transition name="drop">
+            <div v-if="showNotif" class="dropdown notif-dropdown" ref="notifDropdownRef">
+              <div class="drop-header">
+                <span>最新通知</span>
+                <button class="drop-close" @click="showNotif = false">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </div>
+              <div class="drop-list">
+                <div
+                  v-for="item in recentDocs"
+                  :key="item.id"
+                  class="drop-item"
+                  :class="{ unread: item.unread }"
+                  @click="goDoc(item.id)"
+                >
+                  <span class="drop-dot" v-if="item.unread"></span>
+                  <div class="drop-content">
+                    <p class="drop-title">{{ item.title }}</p>
+                    <span class="drop-time">{{ item.time }}</span>
+                  </div>
+                </div>
+              </div>
+              <router-link to="/docs" class="drop-footer" @click="showNotif = false">查看全部文档 →</router-link>
+            </div>
+          </Transition>
+        </div>
+
+        <!-- 我的 -->
+        <div class="action-wrap" ref="userWrapRef">
+          <div class="user-trigger" @click.stop="toggleUserMenu">
+            <div class="avatar" :class="{ 'has-img': user?.avatar }">
+              <img v-if="user?.avatar" :src="user.avatar" alt="avatar" />
+              <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+              </svg>
+            </div>
+            <div class="user-info">
+              <span class="user-name">{{ user?.name || '用户' }}</span>
+            </div>
+          </div>
+          <!-- 用户下拉 -->
+          <Transition name="drop">
+            <div v-if="showUserMenu" class="dropdown user-dropdown" ref="userDropdownRef">
+              <!-- 头像区 -->
+              <div class="profile-head" @click="triggerAvatarUpload">
+                <div class="profile-avatar" :class="{ 'has-img': user?.avatar }">
+                  <img v-if="user?.avatar" :src="user.avatar" alt="avatar" />
+                  <svg v-else width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                  </svg>
+                </div>
+                <div class="profile-name-row">
+                  <span class="profile-name">{{ user?.name }}</span>
+                  <span class="profile-change">点击更换头像</span>
+                </div>
+                <input ref="avatarInputRef" type="file" accept="image/*" class="avatar-input" @change="onAvatarChange" />
+              </div>
+
+              <!-- 学生信息 -->
+              <div v-if="user?.identity === '学生'" class="profile-info">
+                <div class="info-row"><span class="info-label">学号</span><span class="info-val">{{ user?.id }}</span></div>
+                <div class="info-row"><span class="info-label">身份</span><span class="info-val">{{ user?.role }}</span></div>
+                <div class="info-row"><span class="info-label">学院</span><span class="info-val">{{ user?.college }}</span></div>
+                <div class="info-row"><span class="info-label">专业</span><span class="info-val">{{ user?.major }}</span></div>
+                <div class="info-row"><span class="info-label">年级</span><span class="info-val">{{ user?.grade }}</span></div>
+                <div class="info-row"><span class="info-label">班级</span><span class="info-val">{{ user?.className }}</span></div>
+                <div class="info-row"><span class="info-label">电话</span><span class="info-val">{{ user?.phone }}</span></div>
+              </div>
+
+              <!-- 教师信息 -->
+              <div v-if="user?.identity === '教师'" class="profile-info">
+                <div class="info-row"><span class="info-label">工号</span><span class="info-val">{{ user?.id }}</span></div>
+                <div class="info-row"><span class="info-label">职称</span><span class="info-val">{{ user?.title }}</span></div>
+                <div class="info-row"><span class="info-label">学院</span><span class="info-val">{{ user?.college }}</span></div>
+                <div class="info-row"><span class="info-label">邮箱</span><span class="info-val">{{ user?.email }}</span></div>
+              </div>
+
+              <button class="profile-logout" @click="doLogout">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+                </svg>
+                退出登录
+              </button>
+            </div>
+          </Transition>
         </div>
       </div>
     </div>
@@ -85,20 +156,98 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { gsap } from '../plugins/gsap'
 import UserProfileModal from './UserProfileModal.vue'
 
 const router = useRouter()
 const auth = useAuthStore()
 const showProfile = ref(false)
-
 const user = computed(() => auth.user)
 
+const showNotif = ref(false)
+const showUserMenu = ref(false)
+const notifWrapRef = ref(null)
+const notifDropdownRef = ref(null)
+const userWrapRef = ref(null)
+const userDropdownRef = ref(null)
+const avatarInputRef = ref(null)
+const navbarInnerRef = ref(null)
+
+// ---- 模拟通知数据：最新导入的文档 ----
+const recentDocs = [
+  { id: 1, title: '福州大学国家奖学金管理办法（2026修订版）', time: '2小时前', unread: true },
+  { id: 2, title: '本科生转专业实施细则', time: '昨天 14:30', unread: true },
+  { id: 3, title: '学生宿舍管理规定', time: '昨天 09:15', unread: false },
+  { id: 4, title: '2026年夏季小学期选课指南', time: '3天前', unread: false },
+]
+const unreadCount = computed(() => recentDocs.filter(d => d.unread).length)
+
+// ---- Toggle ----
+function toggleNotif() {
+  showNotif.value = !showNotif.value
+  if (showUserMenu.value) showUserMenu.value = false
+  if (showNotif.value) animateIn(notifDropdownRef.value)
+}
+function toggleUserMenu() {
+  showUserMenu.value = !showUserMenu.value
+  if (showNotif.value) showNotif.value = false
+  if (showUserMenu.value) animateIn(userDropdownRef.value)
+}
+
+function animateIn(el) {
+  if (!el) return
+  gsap.fromTo(el, { opacity: 0, y: -8, scale: 0.95 }, { opacity: 1, y: 0, scale: 1, duration: 0.22, ease: 'power2.out' })
+}
+
+// ---- Click outside ----
+function onDocClick(e) {
+  if (notifWrapRef.value && !notifWrapRef.value.contains(e.target)) showNotif.value = false
+  if (userWrapRef.value && !userWrapRef.value.contains(e.target)) showUserMenu.value = false
+}
+
+onMounted(() => {
+  document.addEventListener('click', onDocClick)
+  nextTick(() => {
+    if (navbarInnerRef.value) {
+      gsap.from(navbarInnerRef.value, {
+        y: -24,
+        opacity: 0,
+        duration: 0.55,
+        ease: 'power2.out',
+        delay: 0.05
+      })
+    }
+  })
+})
+onUnmounted(() => document.removeEventListener('click', onDocClick))
+
+// ---- 导航 ----
+function goDoc(id) {
+  showNotif.value = false
+  router.push({ path: '/docs', query: { id } })
+}
+
 function doLogout() {
+  showUserMenu.value = false
   auth.logout()
   router.push('/login')
+}
+
+// ---- 头像上传 ----
+function triggerAvatarUpload() {
+  avatarInputRef.value?.click()
+}
+function onAvatarChange(e) {
+  const file = e.target.files[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = () => {
+    auth.updateAvatar(reader.result)
+  }
+  reader.readAsDataURL(file)
 }
 </script>
 
@@ -197,127 +346,162 @@ function doLogout() {
 .nav-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   flex-shrink: 0;
 }
 
+.action-wrap { position: relative; }
+
 .icon-btn {
   position: relative;
-  width: 38px;
-  height: 38px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  width: 38px; height: 38px;
+  display: flex; align-items: center; justify-content: center;
   border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-secondary);
+  background: transparent; color: var(--text-secondary);
+  border: none; cursor: pointer; font-family: inherit;
   transition: all var(--transition-fast);
 }
-
-.icon-btn:hover {
-  background: var(--bg-warm);
-  color: var(--text);
-}
+.icon-btn:hover, .icon-btn.active { background: var(--bg-warm); color: var(--text); }
 
 .notif-dot {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 7px;
-  height: 7px;
-  background: #E85D3A;
-  border-radius: 50%;
-  border: 2px solid #fff;
+  position: absolute; top: 4px; right: 2px;
+  min-width: 17px; height: 17px; padding: 0 5px;
+  background: #E85D3A; color: #fff;
+  border-radius: 9px; font-size: 0.65rem; font-weight: 600;
+  display: flex; align-items: center; justify-content: center;
+  line-height: 1;
 }
+
+/* 用户触发 */
+.user-trigger {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 8px 4px 4px; border-radius: var(--radius-sm);
+  cursor: pointer; transition: background var(--transition-fast);
+}
+.user-trigger:hover { background: var(--bg-warm); }
+.user-info { line-height: 1.2; }
+.user-name { display: block; font-size: 0.84rem; font-weight: 600; color: var(--text); }
 
 .avatar {
-  width: 38px;
-  height: 38px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  width: 38px; height: 38px;
+  display: flex; align-items: center; justify-content: center;
   border-radius: var(--radius-sm);
-  background: var(--bg-warm);
-  color: var(--text-secondary);
-  cursor: pointer;
+  background: var(--bg-warm); color: var(--text-secondary);
+  overflow: hidden; flex-shrink: 0;
+}
+.avatar img { width: 100%; height: 100%; object-fit: cover; }
+.avatar.has-img { background: transparent; }
+
+/* ===== 下拉面板通用 ===== */
+.dropdown {
+  position: absolute; top: calc(100% + 8px); right: 0;
+  width: 340px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow-lg);
+  z-index: 200; overflow: hidden;
+}
+
+.drop-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px; border-bottom: 1px solid var(--border-light);
+  font-size: 0.88rem; font-weight: 600; color: var(--text);
+}
+.drop-close {
+  width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
+  border-radius: 6px; background: transparent; color: var(--text-tertiary);
+  cursor: pointer; border: none;
+}
+.drop-close:hover { background: var(--bg-warm); }
+
+.drop-list { padding: 4px; }
+.drop-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 12px 14px; border-radius: var(--radius-sm);
+  cursor: pointer; transition: background var(--transition-fast);
+}
+.drop-item:hover { background: var(--bg-warm); }
+
+.drop-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #E85D3A; flex-shrink: 0; margin-top: 5px;
+}
+.drop-item:not(.unread) .drop-dot { visibility: hidden; }
+
+.drop-content { flex: 1; min-width: 0; }
+.drop-title { font-size: 0.84rem; font-weight: 500; color: var(--text); line-height: 1.4; }
+.drop-time { font-size: 0.72rem; color: var(--text-tertiary); margin-top: 3px; display: block; }
+
+.drop-footer {
+  display: block; text-align: center; padding: 12px;
+  font-size: 0.8rem; color: var(--primary); font-weight: 500;
+  border-top: 1px solid var(--border-light); text-decoration: none;
+}
+
+/* 通知下拉宽度 */
+.notif-dropdown { width: 340px; }
+
+/* 用户下拉 */
+.user-dropdown { width: 310px; }
+
+.profile-head {
+  display: flex; align-items: center; gap: 14px;
+  padding: 18px 18px 16px; cursor: pointer; position: relative;
+  transition: background var(--transition-fast);
+}
+.profile-head:hover { background: var(--bg-warm); }
+
+.profile-avatar {
+  width: 52px; height: 52px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius);
+  background: var(--bg-warm); color: var(--text-secondary);
+  overflow: hidden; flex-shrink: 0;
+}
+.profile-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.profile-avatar.has-img { background: transparent; }
+
+.profile-name-row { flex: 1; }
+.profile-name { display: block; font-size: 0.95rem; font-weight: 700; color: var(--text); }
+.profile-change { display: block; font-size: 0.72rem; color: var(--text-tertiary); margin-top: 2px; }
+
+.avatar-input { display: none; }
+
+.profile-info {
+  padding: 4px 18px 12px;
+  display: flex; flex-direction: column; gap: 1px;
+}
+
+.info-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-light);
+}
+.info-row:last-child { border-bottom: none; }
+.info-label { font-size: 0.8rem; color: var(--text-tertiary); }
+.info-val { font-size: 0.84rem; font-weight: 500; color: var(--text); }
+
+.profile-logout {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: calc(100% - 28px); margin: 8px 14px 14px; padding: 10px 0;
+  border-radius: var(--radius-sm); background: var(--bg-warm);
+  color: var(--text-secondary); font-size: 0.84rem; font-weight: 500;
+  cursor: pointer; border: none; font-family: inherit;
   transition: all var(--transition-fast);
 }
+.profile-logout:hover { background: rgba(200,80,50,0.08); color: #C85032; }
 
-.avatar:hover {
-  background: var(--primary-light);
-  color: var(--primary);
-}
-
-.avatar-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: var(--radius-sm);
-}
-
-/* 用户菜单 */
-.user-menu {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.user-info {
-  text-align: right;
-}
-
-.user-name {
-  display: block;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text);
-  line-height: 1.2;
-}
-
-.user-role {
-  display: block;
-  font-size: 0.72rem;
-  color: var(--text-tertiary);
-}
-
-.logout-btn {
-  width: 34px;
-  height: 34px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-tertiary);
-  transition: all var(--transition-fast);
-}
-
-.logout-btn:hover {
-  background: rgba(200, 80, 50, 0.08);
-  color: #C85032;
-}
+/* 下拉动画 */
+.drop-enter-active { transition: all 0.22s cubic-bezier(0.4,0,0.2,1); }
+.drop-leave-active { transition: all 0.15s ease-in; }
+.drop-enter-from, .drop-leave-to { opacity: 0; transform: translateY(-8px) scale(0.95); }
 
 /* 移动端适配 */
 @media (max-width: 768px) {
-  .navbar-inner {
-    padding: 0 14px;
-    margin-top: 8px;
-  }
-
-  .nav-link span {
-    display: none;
-  }
-
-  .nav-link {
-    padding: 8px 10px;
-  }
-
-  .logo-text {
-    display: none;
-  }
-
-  .user-info {
-    display: none;
-  }
+  .navbar-inner { padding: 0 14px; margin-top: 8px; }
+  .nav-link span { display: none; }
+  .nav-link { padding: 8px 10px; }
+  .logo-text { display: none; }
+  .user-info { display: none; }
+  .dropdown { width: 280px; right: -40px; }
 }
 </style>

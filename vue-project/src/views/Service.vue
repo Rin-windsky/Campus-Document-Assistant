@@ -6,7 +6,7 @@
       <!-- 标题区域 -->
       <section class="service-hero">
         <div class="container">
-          <div class="hero-badge">
+          <div ref="heroBadgeRef" class="hero-badge">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
               <line x1="8" y1="21" x2="16" y2="21"/>
@@ -14,14 +14,14 @@
             </svg>
             一站式服务
           </div>
-          <h1 class="hero-title">校园办事大厅</h1>
-          <p class="hero-desc">快速查看校园事务办理流程，每一步都清晰可循</p>
+          <h1 ref="heroTitleRef" class="hero-title">校园办事大厅</h1>
+          <p ref="heroDescRef" class="hero-desc">快速查看校园事务办理流程，每一步都清晰可循</p>
         </div>
       </section>
 
       <!-- 卡片网格 -->
       <section class="service-main container">
-        <div class="service-grid">
+        <div ref="serviceGridRef" class="service-grid">
           <div
             v-for="item in services"
             :key="item.id"
@@ -44,6 +44,11 @@
         </div>
       </section>
     </div>
+
+    <!-- 底部 -->
+    <footer class="service-footer">
+      <img ref="bottomIllustRef" src="/svg/办事%201.svg" alt="" class="footer-illust" />
+    </footer>
 
     <!-- 独立服务子页面：从右侧滑入 -->
     <teleport to="body">
@@ -150,13 +155,19 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import Navbar from '../components/Navbar.vue'
+import { gsap, ScrollTrigger } from '../plugins/gsap'
 
 const router = useRouter()
 const route = useRoute()
 const activeService = ref(null)
+const heroBadgeRef = ref(null)
+const heroTitleRef = ref(null)
+const heroDescRef = ref(null)
+const serviceGridRef = ref(null)
+const bottomIllustRef = ref(null)
 
 const services = [
   {
@@ -272,6 +283,25 @@ function goDocs() {
 }
 
 onMounted(() => {
+  // 入场动画：hero 元素依次浮入 + 卡片交错弹入
+  nextTick(() => {
+    if (heroBadgeRef.value) gsap.from(heroBadgeRef.value, { y: 16, opacity: 0, duration: 0.4, ease: 'power2.out' })
+    if (heroTitleRef.value) gsap.from(heroTitleRef.value, { y: 24, opacity: 0, duration: 0.5, ease: 'power2.out', delay: 0.08 })
+    if (heroDescRef.value) gsap.from(heroDescRef.value, { y: 16, opacity: 0, duration: 0.4, ease: 'power2.out', delay: 0.15 })
+    if (serviceGridRef.value) {
+      const cards = serviceGridRef.value.querySelectorAll('.service-card')
+      gsap.from(cards, {
+        y: 24, opacity: 0, stagger: 0.06, duration: 0.45, ease: 'power2.out', delay: 0.25
+      })
+    }
+    if (bottomIllustRef.value) {
+      gsap.from(bottomIllustRef.value, {
+        scrollTrigger: { trigger: bottomIllustRef.value, start: 'top 90%', toggleActions: 'play none none none' },
+        opacity: 0, y: 30, duration: 0.7
+      })
+    }
+  })
+
   if (route.query.item) {
     const match = services.find(s => s.title.includes(route.query.item) || route.query.item.includes(s.title))
     if (match) openService(match)
@@ -381,6 +411,21 @@ onMounted(() => {
 .service-card:hover .card-arrow {
   transform: translateX(3px);
   color: var(--primary);
+}
+
+/* ===== 底部插图 ===== */
+.service-footer {
+  overflow: hidden;
+  margin-top: -280px;
+  line-height: 0;
+}
+
+.footer-illust {
+  width: 100%;
+  display: block;
+  opacity: 0.12;
+  pointer-events: none;
+  transform: translateY(-45%);
 }
 
 /* ===== 全屏滑入面板 ===== */

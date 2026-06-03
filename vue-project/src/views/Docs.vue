@@ -312,12 +312,13 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import Navbar from '../components/Navbar.vue'
 import { uploadDocument, getDocumentList, deleteDocument } from '../api/index.js'
 import { getDefaultDocs, getDocText, getDOCXHtml, getXLSXHtml } from '../services/knowledgeBase.js'
 import { useAuthStore } from '../stores/auth.js'
+import { gsap } from '../plugins/gsap'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -401,7 +402,24 @@ async function loadDocs() {
 }
 
 onMounted(() => {
+  // 入场动画：侧边栏 + 搜索栏依次滑入
+  nextTick(() => {
+    gsap.from('.docs-layout > .docs-sidebar', { x: -20, opacity: 0, duration: 0.45, ease: 'power2.out' })
+    gsap.from('.docs-search-bar', { y: -12, opacity: 0, duration: 0.4, ease: 'power2.out', delay: 0.08 })
+    gsap.from('.docs-result-info', { y: -8, opacity: 0, duration: 0.35, ease: 'power2.out', delay: 0.15 })
+  })
   loadDocs()
+})
+
+// 文档加载完成后卡片交错淡入
+watch(loadingDocs, (val) => {
+  if (!val) {
+    nextTick(() => {
+      gsap.from('.doc-card', {
+        y: 20, opacity: 0, stagger: 0.04, duration: 0.4, ease: 'power2.out'
+      })
+    })
+  }
 })
 
 

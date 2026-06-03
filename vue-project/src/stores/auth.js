@@ -5,9 +5,11 @@ import { setToken, removeToken } from '../api/request'
 
 export const useAuthStore = defineStore('auth', () => {
   const isAuthenticated = ref(!!sessionStorage.getItem('auth_user'))
-  const user = ref(JSON.parse(sessionStorage.getItem('auth_user') || 'null'))
+  const rawUser = JSON.parse(sessionStorage.getItem('auth_user') || 'null')
+  // 兼容旧格式：缺少新增字段时用 mock 补全
+  const user = ref(rawUser ? { ...buildMockUser(rawUser.id), ...rawUser, avatar: rawUser.avatar || null } : null)
 
-  const isTeacher = computed(() => user.value?.role === 'TEACHER')
+  const isTeacher = computed(() => user.value?.identity === '教师')
 
   function setUser(userInfo) {
     sessionStorage.setItem('auth_user', JSON.stringify(userInfo))
@@ -22,12 +24,14 @@ export const useAuthStore = defineStore('auth', () => {
       const data = await loginApi(userId, password)
       setToken(data.token)
 
-      let userInfo = null
+      // 获取用户信息；后端返回的字段优先，缺失的用 mock 补全
+      const defaults = buildMockUser(userId)
+      let userInfo
       try {
         const { data: info } = await getUserInfo()
-        userInfo = mapUserInfo(info, userId)
+        userInfo = { ...defaults, ...info, id: info.id || userId, avatar: info.avatar || null }
       } catch {
-        userInfo = buildMockUser(userId)
+        userInfo = defaults
       }
 
       setUser(userInfo)
@@ -50,6 +54,18 @@ export const useAuthStore = defineStore('auth', () => {
     return { ok: true }
   }
 
+  function updateAvatar(avatarUrl) {
+    if (!user.value) return
+    user.value = { ...user.value, avatar: avatarUrl }
+    sessionStorage.setItem('auth_user', JSON.stringify(user.value))
+  }
+
+  function updateProfile(fields) {
+    if (!user.value) return
+    user.value = { ...user.value, ...fields }
+    sessionStorage.setItem('auth_user', JSON.stringify(user.value))
+  }
+
   function logout() {
     removeToken()
     sessionStorage.removeItem('auth_user')
@@ -57,43 +73,28 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated.value = false
   }
 
-  return { isAuthenticated, user, isTeacher, login, logout, setUser }
+  return { isAuthenticated, user, isTeacher, login, logout, setUser, updateAvatar, updateProfile }
 })
 
-function mapUserInfo(info, fallbackUsername) {
-  const role = info.role || (String(fallbackUsername).startsWith('9') ? 'STUDENT' : 'TEACHER')
-  return {
-    id: info.id,
-    username: info.username || fallbackUsername,
-    name: info.name || fallbackUsername,
-    role,
-    roleLabel: info.roleLabel || (role === 'TEACHER' ? '教师' : '学生'),
-    avatar: info.avatar || null,
-    college: info.college || null,
-    grade: info.grade || null,
-    major: info.major || null,
-    className: info.className || null,
-    phone: info.phone || null,
-    email: info.email || null,
-    jobTitle: info.jobTitle || null
-  }
-}
-
 function buildMockUser(userId) {
-  const isTeacher = !String(userId).startsWith('9')
+  const isStudent = userId.startsWith('1')
   return {
     id: userId,
-    username: userId,
-    name: isTeacher ? '李老师' : '张同学',
-    role: isTeacher ? 'TEACHER' : 'STUDENT',
-    roleLabel: isTeacher ? '教师' : '学生',
+    name: isStudent ? '张同学' : '李老师',
+    identity: isStudent ? '学生' : '教师',
+    role: isStudent ? '本科生' : '讲师',
+    college: '计算机与大数据学院',
     avatar: null,
-    college: null,
-    grade: null,
-    major: null,
-    className: null,
-    phone: null,
-    email: null,
-    jobTitle: null
+    // 学生特有
+    ...(isStudent ? {
+      major: '计算机科学与技术',
+      grade: '2024级',
+      className: '计科2401班',
+      phone: '138****5678',
+    } : {
+      // 教师特有
+      title: '讲师',
+      email: 'lisi@fzu.edu.cn',
+    })
   }
 }

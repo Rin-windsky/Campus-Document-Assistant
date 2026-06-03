@@ -9,7 +9,7 @@
     </div>
 
     <!-- 主卡片 -->
-    <div class="auth-card">
+    <div ref="authCardRef" class="auth-card">
       <!-- 左侧品牌区 -->
       <div class="card-brand">
         <div class="brand-inner">
@@ -22,7 +22,7 @@
           </div>
           <h1>校问必答</h1>
           <p class="brand-sub">校园文档智能助手</p>
-          <div class="brand-features">
+          <div ref="brandFeaturesRef" class="brand-features">
             <div class="bf-item">
               <div class="bf-icon">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -234,10 +234,11 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { registerApi } from '../api/index.js'
+import { gsap } from '../plugins/gsap'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -253,6 +254,8 @@ const loading = ref(false)
 const loginPwdRef = ref(null)
 const regPwd1Ref = ref(null)
 const regPwd2Ref = ref(null)
+const authCardRef = ref(null)
+const brandFeaturesRef = ref(null)
 
 const loginForm = reactive({ userId: '', password: '' })
 const registerForm = reactive({ userId: '', password: '', confirmPwd: '' })
@@ -322,6 +325,18 @@ async function doRegister() {
     router.push(redirect)
   }
 }
+
+onMounted(() => {
+  nextTick(() => {
+    if (authCardRef.value) {
+      gsap.from(authCardRef.value, { y: 24, opacity: 0, scale: 0.97, duration: 0.6, ease: 'power2.out' })
+    }
+    if (brandFeaturesRef.value) {
+      const items = brandFeaturesRef.value.querySelectorAll('.bf-item')
+      gsap.from(items, { x: -20, opacity: 0, stagger: 0.1, duration: 0.45, ease: 'power2.out', delay: 0.3 })
+    }
+  })
+})
 </script>
 
 <style scoped>
