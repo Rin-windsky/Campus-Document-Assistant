@@ -11,6 +11,15 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isTeacher = computed(() => user.value?.identity === '教师')
 
+  /** 将后端返回的相对路径转为完整 URL（data: 或 http 开头的原样返回） */
+  const API_DOMAIN = (import.meta.env.VITE_API_BASE || '').replace(/\/api\/?$/, '')
+  function resolveAvatarUrl(avatar) {
+    if (!avatar) return null
+    if (avatar.startsWith('data:') || avatar.startsWith('http://') || avatar.startsWith('https://')) return avatar
+    return API_DOMAIN + avatar
+  }
+  const avatarUrl = computed(() => resolveAvatarUrl(user.value?.avatar))
+
   function setUser(userInfo) {
     sessionStorage.setItem('auth_user', JSON.stringify(userInfo))
     user.value = userInfo
@@ -24,12 +33,12 @@ export const useAuthStore = defineStore('auth', () => {
       const data = await loginApi(userId, password)
       setToken(data.token)
 
-      // 获取用户信息；后端返回的字段优先，缺失的用 mock 补全
+      // 获取用户信息，规范化字段名后合并 mock 默认值
       const defaults = buildMockUser(userId)
       let userInfo
       try {
         const { data: info } = await getUserInfo()
-        userInfo = { ...defaults, ...info, id: info.id || userId, avatar: info.avatar || null }
+        userInfo = normalizeUserInfo(info, defaults)
       } catch {
         userInfo = defaults
       }
@@ -73,13 +82,14 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated.value = false
   }
 
-  return { isAuthenticated, user, isTeacher, login, logout, setUser, updateAvatar, updateProfile }
+  return { isAuthenticated, user, isTeacher, avatarUrl, login, logout, setUser, updateAvatar, updateProfile }
 })
 
 function buildMockUser(userId) {
-  const isStudent = userId.startsWith('1')
+  const id = String(userId)
+  const isStudent = id.startsWith('1')
   return {
-    id: userId,
+    id,
     name: isStudent ? '张同学' : '李老师',
     identity: isStudent ? '学生' : '教师',
     role: isStudent ? '本科生' : '讲师',
@@ -96,5 +106,36 @@ function buildMockUser(userId) {
       title: '讲师',
       email: 'lisi@fzu.edu.cn',
     })
+  }
+}
+
+/**
+ * 将后端返回的用户信息规范化到前端统一字段名。
+ * 后端可能使用不同命名（如 username / realName / jobTitle 等），
+ * 这里做一次映射，确保后续组件取值一致。
+ */
+function normalizeUserInfo(backendUser, defaults) {
+  if (!backendUser || typeof backendUser !== 'object') return defaults
+
+  const raw = { ...backendUser }
+  const id = String(raw.username || raw.studentId || raw.teacherId || raw.id || defaults.id)
+  const isTeacher = raw.role === 'TEACHER' || raw.role === 'teacher' || id.startsWith('2') || id.startsWith('3')
+
+  return {
+    ...defaults,
+    id,
+    name: raw.name || raw.realName || raw.nickname || defaults.name,
+    identity: isTeacher ? '教师' : '学生',
+    role: raw.roleLabel || (isTeacher ? defaults.role : raw.role) || defaults.role,
+    college: raw.college || raw.department || raw.dept || defaults.college,
+    avatar: raw.avatar || defaults.avatar,
+    // 学生字段
+    major: raw.major || defaults.major,
+    grade: raw.grade || defaults.grade,
+    className: raw.className || raw.classname || defaults.className,
+    phone: raw.phone || raw.phoneNumber || raw.mobile || defaults.phone,
+    // 教师字段
+    title: raw.title || raw.jobTitle || raw.position || defaults.title,
+    email: raw.email || defaults.email,
   }
 }

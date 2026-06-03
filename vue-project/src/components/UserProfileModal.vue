@@ -30,21 +30,21 @@
               <dd>{{ profile.name || '—' }}</dd>
             </div>
             <div class="field-row">
-              <dt>{{ profile.role === 'TEACHER' ? '工号' : '学号' }}</dt>
-              <dd>{{ profile.username || '—' }}</dd>
+              <dt>{{ profile.identity === '教师' ? '工号' : '学号' }}</dt>
+              <dd>{{ profile.id || '—' }}</dd>
             </div>
             <div class="field-row">
               <dt>身份</dt>
-              <dd>{{ profile.roleLabel || '—' }}</dd>
+              <dd>{{ profile.identity || profile.role || '—' }}</dd>
             </div>
             <div class="field-row">
               <dt>学院</dt>
               <dd>{{ profile.college || '—' }}</dd>
             </div>
-            <template v-if="profile.role === 'TEACHER'">
+            <template v-if="profile.identity === '教师'">
               <div class="field-row">
                 <dt>职称</dt>
-                <dd>{{ profile.jobTitle || '—' }}</dd>
+                <dd>{{ profile.title || '—' }}</dd>
               </div>
               <div class="field-row">
                 <dt>邮箱</dt>
@@ -99,7 +99,7 @@ const profile = computed(() => auth.user || {})
 
 watch(() => props.visible, (open) => {
   if (open) {
-    avatarPreview.value = profile.value?.avatar || null
+    avatarPreview.value = auth.avatarUrl || null
     avatarError.value = ''
   }
 })

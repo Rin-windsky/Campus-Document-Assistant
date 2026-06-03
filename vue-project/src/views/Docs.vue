@@ -1242,11 +1242,13 @@ function onDrop(e) {
 
 .preview-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
 .preview-actions .btn {
-  flex: 1;
+  flex: 1 1 calc(50% - 4px);
+  min-width: 140px;
   font-size: 0.82rem;
   padding: 8px 12px;
 }

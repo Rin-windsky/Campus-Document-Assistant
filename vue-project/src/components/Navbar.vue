@@ -91,8 +91,8 @@
         <!-- 我的 -->
         <div class="action-wrap" ref="userWrapRef">
           <div class="user-trigger" @click.stop="toggleUserMenu">
-            <div class="avatar" :class="{ 'has-img': user?.avatar }">
-              <img v-if="user?.avatar" :src="user.avatar" alt="avatar" />
+            <div class="avatar" :class="{ 'has-img': auth.avatarUrl }">
+              <img v-if="auth.avatarUrl" :src="auth.avatarUrl" alt="avatar" />
               <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
                 <circle cx="12" cy="7" r="4"/>
@@ -107,8 +107,8 @@
             <div v-if="showUserMenu" class="dropdown user-dropdown" ref="userDropdownRef">
               <!-- 头像区 -->
               <div class="profile-head" @click="triggerAvatarUpload">
-                <div class="profile-avatar" :class="{ 'has-img': user?.avatar }">
-                  <img v-if="user?.avatar" :src="user.avatar" alt="avatar" />
+                <div class="profile-avatar" :class="{ 'has-img': auth.avatarUrl }">
+                  <img v-if="auth.avatarUrl" :src="auth.avatarUrl" alt="avatar" />
                   <svg v-else width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
                   </svg>
@@ -159,6 +159,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { updateAvatar } from '../api/index.js'
 import { gsap } from '../plugins/gsap'
 import UserProfileModal from './UserProfileModal.vue'
 
@@ -244,8 +245,15 @@ function onAvatarChange(e) {
   const file = e.target.files[0]
   if (!file) return
   const reader = new FileReader()
-  reader.onload = () => {
-    auth.updateAvatar(reader.result)
+  reader.onload = async () => {
+    try {
+      const { data } = await updateAvatar(reader.result)
+      auth.setUser(data)
+    } catch (err) {
+      // 后端可能暂不支持，至少先更新本地
+      console.warn('头像后端保存失败，仅本地生效:', err.message)
+      auth.updateAvatar(reader.result)
+    }
   }
   reader.readAsDataURL(file)
 }

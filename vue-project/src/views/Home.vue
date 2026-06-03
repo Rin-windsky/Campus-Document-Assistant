@@ -494,6 +494,9 @@ onMounted(() => {
         })
       }
     }, homeRoot.value)
+
+    // 路由跳转后刷新 ScrollTrigger 定位
+    ScrollTrigger.refresh()
   })
 })
 

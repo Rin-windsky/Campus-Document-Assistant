@@ -155,7 +155,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import Navbar from '../components/Navbar.vue'
 import { gsap, ScrollTrigger } from '../plugins/gsap'
@@ -168,6 +168,7 @@ const heroTitleRef = ref(null)
 const heroDescRef = ref(null)
 const serviceGridRef = ref(null)
 const bottomIllustRef = ref(null)
+let ctx
 
 const services = [
   {
@@ -283,23 +284,27 @@ function goDocs() {
 }
 
 onMounted(() => {
-  // 入场动画：hero 元素依次浮入 + 卡片交错弹入
   nextTick(() => {
-    if (heroBadgeRef.value) gsap.from(heroBadgeRef.value, { y: 16, opacity: 0, duration: 0.4, ease: 'power2.out' })
-    if (heroTitleRef.value) gsap.from(heroTitleRef.value, { y: 24, opacity: 0, duration: 0.5, ease: 'power2.out', delay: 0.08 })
-    if (heroDescRef.value) gsap.from(heroDescRef.value, { y: 16, opacity: 0, duration: 0.4, ease: 'power2.out', delay: 0.15 })
-    if (serviceGridRef.value) {
-      const cards = serviceGridRef.value.querySelectorAll('.service-card')
-      gsap.from(cards, {
-        y: 24, opacity: 0, stagger: 0.06, duration: 0.45, ease: 'power2.out', delay: 0.25
-      })
-    }
-    if (bottomIllustRef.value) {
-      gsap.from(bottomIllustRef.value, {
-        scrollTrigger: { trigger: bottomIllustRef.value, start: 'top 90%', toggleActions: 'play none none none' },
-        opacity: 0, y: 30, duration: 0.7
-      })
-    }
+    ctx = gsap.context(() => {
+      if (heroBadgeRef.value) gsap.from(heroBadgeRef.value, { y: 16, opacity: 0, duration: 0.4, ease: 'power2.out' })
+      if (heroTitleRef.value) gsap.from(heroTitleRef.value, { y: 24, opacity: 0, duration: 0.5, ease: 'power2.out', delay: 0.08 })
+      if (heroDescRef.value) gsap.from(heroDescRef.value, { y: 16, opacity: 0, duration: 0.4, ease: 'power2.out', delay: 0.15 })
+      if (serviceGridRef.value) {
+        const cards = serviceGridRef.value.querySelectorAll('.service-card')
+        gsap.from(cards, {
+          y: 24, opacity: 0, stagger: 0.06, duration: 0.45, ease: 'power2.out', delay: 0.25
+        })
+      }
+      if (bottomIllustRef.value) {
+        gsap.from(bottomIllustRef.value, {
+          scrollTrigger: { trigger: bottomIllustRef.value, start: 'top 90%', toggleActions: 'play none none none' },
+          opacity: 0, y: 30, duration: 0.7
+        })
+      }
+    })
+
+    // 路由跳转后刷新 ScrollTrigger 定位
+    ScrollTrigger.refresh()
   })
 
   if (route.query.item) {
@@ -307,6 +312,8 @@ onMounted(() => {
     if (match) openService(match)
   }
 })
+
+onUnmounted(() => { ctx?.revert() })
 </script>
 
 <style scoped>
