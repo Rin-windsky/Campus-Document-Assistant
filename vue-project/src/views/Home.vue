@@ -1,7 +1,5 @@
 <template>
   <div ref="homeRoot" class="home">
-    <Navbar />
-
     <!-- Hero 区域 -->
     <section class="hero">
       <img ref="heroIllustRef" src="/svg/首页顶 1.svg" alt="" class="hero-illust" />
@@ -209,7 +207,7 @@
 
     <!-- 底部 -->
     <footer class="footer">
-      <img ref="bottomIllustRef" src="/svg/首页底.svg" alt="" class="footer-illust" />
+      <img ref="bottomIllustRef" src="/svg/首页底.svg" alt="" class="footer-illust" :class="{ 'footer-illust-animate': bottomIllustVisible }" />
       <div class="container footer-inner">
         <div ref="footerBrandRef" class="footer-brand">
           <span class="footer-logo">校问必答</span>
@@ -233,7 +231,6 @@
 import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { gsap, ScrollTrigger } from '../plugins/gsap'
-import Navbar from '../components/Navbar.vue'
 import { useNotificationStore } from '../stores/notification'
 import { useTodoStore } from '../stores/todo'
 
@@ -242,7 +239,9 @@ const notifStore = useNotificationStore()
 const todoStore = useTodoStore()
 const searchQuery = ref('')
 const editMode = ref(false)
+const bottomIllustVisible = ref(false)
 let ctx
+let bottomObserver = null
 
 // ---- Refs for animation targets ----
 const homeRoot = ref(null)
@@ -416,12 +415,18 @@ onMounted(() => {
         if (todoItemEls.length) todoTl.from(todoItemEls, { x: -20, opacity: 0, stagger: 0.06, duration: 0.4, ease: 'power2.out' }, 0.12)
       }
 
-      // 8. 底部插图 ScrollTrigger
+      // 8. 底部插图 CSS 动画（IntersectionObserver）
       if (bottomIllustRef.value) {
-        gsap.from(bottomIllustRef.value, {
-          scrollTrigger: { trigger: bottomIllustRef.value, start: 'top 90%', toggleActions: 'play none none none' },
-          opacity: 0, y: 30, duration: 0.7
-        })
+        bottomObserver = new IntersectionObserver(
+          ([entry]) => {
+            if (entry.isIntersecting) {
+              bottomIllustVisible.value = true
+              bottomObserver?.unobserve(entry.target)
+            }
+          },
+          { threshold: 0.1 }
+        )
+        bottomObserver.observe(bottomIllustRef.value)
       }
 
       // 9. 快捷服务 ScrollTrigger - header + 卡片依次弹入
@@ -506,7 +511,10 @@ onMounted(() => {
   })
 })
 
-onUnmounted(() => { ctx?.revert() })
+onUnmounted(() => {
+  ctx?.revert()
+  bottomObserver?.disconnect()
+})
 </script>
 
 <style scoped>
@@ -967,9 +975,24 @@ onUnmounted(() => { ctx?.revert() })
   bottom: 0; left: 50%;
   transform: translateX(-50%);
   width: 60%; max-width: 800px;
-  opacity: 0.15;
+  opacity: 0;
   pointer-events: none;
   z-index: 0;
+}
+
+.footer-illust.footer-illust-animate {
+  animation: footerIllustIn 0.8s cubic-bezier(0.19, 1, 0.22, 1) forwards;
+}
+
+@keyframes footerIllustIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(30px);
+  }
+  to {
+    opacity: 0.15;
+    transform: translateX(-50%) translateY(0);
+  }
 }
 
 .footer-inner, .footer-bottom { position: relative; z-index: 1; }

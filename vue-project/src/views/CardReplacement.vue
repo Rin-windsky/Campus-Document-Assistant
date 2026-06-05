@@ -1,7 +1,5 @@
 <template>
   <div class="card-replace-page">
-    <Navbar />
-
     <div class="page-content">
       <div class="container">
         <button ref="backBtnRef" class="back-btn" @click="router.push('/service')">
@@ -161,7 +159,6 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
-import Navbar from '../components/Navbar.vue'
 import { useAuthStore } from '../stores/auth'
 import { useTodoStore } from '../stores/todo'
 import { createCardReplacement, getCardReplacementList, cancelCardReplacement } from '../api'

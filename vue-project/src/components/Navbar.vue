@@ -22,7 +22,7 @@
           </svg>
           <span>首页</span>
         </router-link>
-        <router-link to="/chat" class="nav-link" :class="{ active: $route.path === '/chat' }">
+        <router-link to="/chat" class="nav-link" :class="{ active: $route.path === '/chat' }" @mouseenter="prefetchChat">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
           </svg>
@@ -84,6 +84,11 @@
                     <p class="drop-title">{{ item.title }}</p>
                     <span class="drop-time">{{ item.time }}</span>
                   </div>
+                  <button class="drop-item-del" @click.stop="removeNotif(item.id)" title="删除">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                  </button>
                 </div>
               </div>
               <div v-else class="drop-empty">暂无通知</div>
@@ -225,6 +230,10 @@ onMounted(() => {
 onUnmounted(() => document.removeEventListener('click', onDocClick))
 
 // ---- 导航 ----
+function removeNotif(id) {
+  notifStore.removeNotification(id)
+}
+
 function goNotif(item) {
   showNotif.value = false
   notifStore.markRead(item.id)
@@ -239,6 +248,10 @@ function doLogout() {
   showUserMenu.value = false
   auth.logout()
   router.push('/login')
+}
+
+function prefetchChat() {
+  import('../views/Chat.vue')
 }
 
 // ---- 头像上传 ----
@@ -460,6 +473,18 @@ function onAvatarChange(e) {
   transition: background var(--transition-fast);
 }
 .drop-mark-read:hover { background: var(--primary-light); }
+
+.drop-item-del {
+  opacity: 0;
+  width: 24px; height: 24px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 4px; flex-shrink: 0;
+  background: transparent; color: var(--text-tertiary);
+  border: none; cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.drop-item:hover .drop-item-del { opacity: 1; }
+.drop-item-del:hover { background: rgba(200,80,50,0.1); color: #C85032; }
 
 .drop-empty {
   padding: 32px 20px; text-align: center; font-size: 0.85rem; color: var(--text-tertiary);

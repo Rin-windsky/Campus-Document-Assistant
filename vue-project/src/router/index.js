@@ -1,67 +1,59 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
-import Login from '../views/Login.vue'
-import Home from '../views/Home.vue'
-import Chat from '../views/Chat.vue'
-import Docs from '../views/Docs.vue'
-import Service from '../views/Service.vue'
-import CardReplacement from '../views/CardReplacement.vue'
-import ServiceDetail from '../views/ServiceDetail.vue'
-
 const routes = [
   {
     path: '/login',
-    component: Login,
+    component: () => import('../views/Login.vue'),
     meta: { guest: true }
   },
   {
     path: '/',
-    component: Home,
+    component: () => import('../views/Home.vue'),
     meta: { requiresAuth: true }
   },
   {
     path: '/chat',
-    component: Chat,
-    meta: { requiresAuth: true }
+    component: () => import('../views/Chat.vue'),
+    meta: { requiresAuth: true, keepAlive: true }
   },
   {
     path: '/docs',
-    component: Docs,
-    meta: { requiresAuth: true }
+    component: () => import('../views/Docs.vue'),
+    meta: { requiresAuth: true, keepAlive: true }
   },
   {
     path: '/service',
-    component: Service,
+    component: () => import('../views/Service.vue'),
     meta: { requiresAuth: true }
   },
   {
     path: '/service/card-replacement',
-    component: CardReplacement,
+    component: () => import('../views/CardReplacement.vue'),
     meta: { requiresAuth: true }
   },
   {
     path: '/service/scholarship',
-    component: ServiceDetail,
+    component: () => import('../views/ServiceDetail.vue'),
     meta: { requiresAuth: true }
   },
   {
     path: '/service/major-transfer',
-    component: ServiceDetail,
+    component: () => import('../views/ServiceDetail.vue'),
     meta: { requiresAuth: true }
   },
   {
     path: '/service/suspension',
-    component: ServiceDetail,
+    component: () => import('../views/ServiceDetail.vue'),
     meta: { requiresAuth: true }
   },
   {
     path: '/service/dorm-repair',
-    component: ServiceDetail,
+    component: () => import('../views/ServiceDetail.vue'),
     meta: { requiresAuth: true }
   },
   {
     path: '/service/grade-cert',
-    component: ServiceDetail,
+    component: () => import('../views/ServiceDetail.vue'),
     meta: { requiresAuth: true }
   }
 ]

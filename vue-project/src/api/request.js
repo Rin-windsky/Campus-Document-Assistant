@@ -229,6 +229,24 @@ export function del(url, config)          { return http.delete(url, config) }
 export function patch(url, data, config)  { return http.patch(url, data, config) }
 
 /**
+ * 文件下载（Blob 方式，带更长超时和进度回调）
+ * @param {string}    url          下载接口地址
+ * @param {Function}  onProgress   进度回调 (0-100)
+ * @param {number}    timeout      超时时间（毫秒，默认 120s）
+ */
+export function fetchBlob(url, onProgress, timeout = 120000) {
+  return http.get(url, {
+    responseType: 'blob',
+    timeout,
+    onDownloadProgress: (evt) => {
+      if (evt.total && onProgress) {
+        onProgress(Math.round((evt.loaded / evt.total) * 100))
+      }
+    },
+  })
+}
+
+/**
  * 文件上传（带进度回调）
  * @param {string}    url          上传接口地址
  * @param {File}      file         文件对象
@@ -290,6 +308,17 @@ export async function batchRequest(tasks, limit = 3) {
   }
 
   return Promise.allSettled(results)
+}
+
+/**
+ * 构建文档文件直链 URL（用于 iframe / 新窗口打开）
+ * @param {number|string} documentId  文档 ID
+ * @param {string}        previewToken 从 /document/{id}/preview-token 获取的短效 token
+ * @returns {string} 完整文件 URL，如 https://campusdocai.cpolar.top/api/document/44/file?token=xxx
+ */
+export function buildDocumentFileUrl(documentId, previewToken) {
+  const base = (import.meta.env.VITE_API_BASE || '/api').replace(/\/api\/?$/, '')
+  return `${base}/api/document/${documentId}/file?token=${previewToken}`
 }
 
 export default http

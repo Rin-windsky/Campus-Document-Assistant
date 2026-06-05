@@ -1,7 +1,5 @@
 <template>
   <div class="service-page">
-    <Navbar />
-
     <div class="service-content">
       <!-- 标题区域 -->
       <section class="service-hero">
@@ -56,7 +54,6 @@
 <script setup>
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
-import Navbar from '../components/Navbar.vue'
 import { gsap } from '../plugins/gsap'
 
 const router = useRouter()

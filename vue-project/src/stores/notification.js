@@ -61,6 +61,14 @@ export const useNotificationStore = defineStore('notification', () => {
     return !readIds.value.has(id)
   }
 
+  /** 删除单条通知 */
+  function removeNotification(id) {
+    notifications.value = notifications.value.filter(n => n.id !== id)
+    readIds.value.delete(id)
+    saveNotifications(notifications.value)
+    saveReadIds(readIds.value)
+  }
+
   // 初始化种子数据：如果为空则填充默认通知
   if (notifications.value.length === 0) {
     const seeds = [
@@ -72,7 +80,7 @@ export const useNotificationStore = defineStore('notification', () => {
     seeds.forEach(s => addNotification(s))
   }
 
-  return { notifications, readIds, unreadCount, addNotification, markRead, markAllRead, isUnread }
+  return { notifications, readIds, unreadCount, addNotification, markRead, markAllRead, isUnread, removeNotification }
 })
 
 function typeLabel(t) {

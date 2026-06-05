@@ -1,7 +1,5 @@
 <template>
   <div class="chat-page">
-    <Navbar />
-
     <div class="chat-layout">
       <!-- 左侧：对话历史 -->
       <aside class="sidebar">
@@ -11,7 +9,6 @@
           </svg>
           新对话
         </button>
-
         <div class="history-label">最近对话</div>
         <div class="history-list">
           <div
@@ -40,8 +37,11 @@
       <!-- 中间：对话区域 -->
       <main class="chat-main">
         <div class="chat-messages" ref="chatRef">
+          <div v-if="loadingMessages" class="chat-loading-center">
+            <div class="chat-loading-spinner"></div>
+          </div>
           <!-- 欢迎提示 -->
-          <div v-if="messages.length === 0" class="welcome">
+          <div v-if="!loadingMessages && messages.length === 0" class="welcome">
             <div class="welcome-icon">
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
@@ -106,8 +106,10 @@
           </div>
 
           <div v-if="thinking" class="msg-wrap ai thinking-wrap">
-            <div class="thinking-dots">
-              <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+            <div class="msg-body">
+              <div class="thinking-dots">
+                <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+              </div>
             </div>
           </div>
         </div>
@@ -216,41 +218,39 @@
 <script setup>
 import { ref, reactive, nextTick, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import Navbar from '../components/Navbar.vue'
-import { askQuestion as apiAsk, getConversationList, getConversationMessages, deleteConversation } from '../api/index.js'
+import { askQuestion as apiAsk, getConversationList, getConversationMessages } from '../api/index.js'
 import { getAllDocs, searchDocs } from '../services/knowledgeBase.js'
-import { gsap } from '../plugins/gsap'
-import { marked } from 'marked'
+
+defineOptions({ name: 'Chat' })
+
+let markedParser = null
 
 const route = useRoute()
 const router = useRouter()
 const chatRef = ref(null)
 const inputText = ref('')
+const loadingMessages = ref(false)
 
-function renderMarkdown(text) {
+async function renderMarkdown(text) {
   if (!text) return ''
-  return marked.parse(text)
+  if (!markedParser) {
+    const { marked } = await import('marked')
+    markedParser = marked
+  }
+  return markedParser.parse(text)
 }
 const thinking = ref(false)
 const selectedCitation = ref(null)
-const currentChatId = ref(1)
-let chatIdCounter = 1
+const currentChatId = ref(null)
+let chatIdCounter = 0
 
-const chatStore = reactive({
-  1: []
-})
+const chatStore = reactive({})
+const conversationIdMap = reactive({})  // 本地 id → 后端 conversation id
+const messagesLoaded = reactive({})     // 标记消息是否已从后端加载
 
-// 本地 chatId → 后端 conversation id 映射（null = 未同步到后端）
-const conversationIdMap = reactive({})
+const chatHistory = ref([])
 
-// 标记某会话的消息是否已从后端加载过
-const messagesLoaded = reactive({})
-
-const chatHistory = ref([
-  { id: 1, title: '新对话' }
-])
-
-const messages = ref(chatStore[currentChatId.value])
+const messages = ref([])
 
 const welcomeHints = [
   '国家奖学金什么时候申请？',
@@ -352,33 +352,38 @@ function buildSearchResponse(question, results) {
   return html
 }
 
-async function startNewChat() {
+function startNewChat() {
   chatIdCounter++
   const newId = chatIdCounter
   chatStore[newId] = []
   chatHistory.value.unshift({ id: newId, title: '新对话' })
   currentChatId.value = newId
   messages.value = chatStore[newId]
+  messagesLoaded[newId] = false
   selectedCitation.value = null
-  conversationIdMap[newId] = null
-  messagesLoaded[newId] = true
+}
+
+function ensureChat() {
+  if (currentChatId.value && chatStore[currentChatId.value]) return
+  startNewChat()
 }
 
 async function switchChat(id) {
+  if (currentChatId.value === id) return
   currentChatId.value = id
-  messages.value = chatStore[id]
+  messages.value = chatStore[id] || []
   selectedCitation.value = null
 
-  // 如果还没从后端加载过，尝试拉取消息
-  const convId = conversationIdMap[id]
-  if (convId && !messagesLoaded[id]) {
+  const backendId = conversationIdMap[id]
+  if (backendId && !messagesLoaded[id]) {
+    loadingMessages.value = true
     try {
-      const { data } = await getConversationMessages(convId)
+      const { data } = await getConversationMessages(backendId)
       const list = Array.isArray(data) ? data : (data?.messages || data?.list || [])
       if (list.length) {
-        chatStore[id] = list.map(m => ({
+        chatStore[id] = await Promise.all(list.map(async m => ({
           role: m.role === 'assistant' ? 'ai' : 'user',
-          content: m.role === 'assistant' ? renderMarkdown(m.content || '') : (m.content || ''),
+          content: m.role === 'assistant' ? await renderMarkdown(m.content || '') : (m.content || ''),
           citations: (m.citations || []).map(c => ({
             doc: c.title || c.doc || '',
             location: c.location || c.department || '',
@@ -386,39 +391,28 @@ async function switchChat(id) {
             date: c.date || '',
             excerpt: c.excerpt || c.snippet || c.content || ''
           }))
-        }))
+        })))
         messages.value = chatStore[id]
       }
     } catch (e) {
       console.warn('加载会话消息失败:', e.message)
+    } finally {
+      loadingMessages.value = false
     }
     messagesLoaded[id] = true
   }
 }
 
-async function deleteChat(id) {
+function deleteChat(id) {
   const idx = chatHistory.value.findIndex(c => c.id === id)
   if (idx < 0) return
-
-  // 先更新本地 UI（不等待后端）
   chatHistory.value.splice(idx, 1)
   delete chatStore[id]
-  const convId = conversationIdMap[id]
   delete conversationIdMap[id]
   delete messagesLoaded[id]
-
-  // 异步删后端（静默失败，不影响 UI）
-  if (convId) {
-    deleteConversation(convId).catch(() => {})
-  }
-
   if (currentChatId.value === id) {
-    currentChatId.value = null
-    if (chatHistory.value.length > 0) {
-      await switchChat(chatHistory.value[0].id)
-    } else {
-      startNewChat()
-    }
+    currentChatId.value = chatHistory.value.length > 0 ? chatHistory.value[0].id : null
+    messages.value = currentChatId.value ? chatStore[currentChatId.value] : []
   }
 }
 
@@ -426,8 +420,10 @@ async function sendMessage(question) {
   const text = (question || inputText.value).trim()
   if (!text || thinking.value) return
 
-  const userMsg = { role: 'user', content: text }
-  messages.value.push(userMsg)
+  ensureChat()
+
+  const msgs = chatStore[currentChatId.value]
+  msgs.push({ role: 'user', content: text })
 
   const histItem = chatHistory.value.find(c => c.id === currentChatId.value)
   if (histItem && histItem.title === '新对话') {
@@ -446,12 +442,11 @@ async function sendMessage(question) {
     const convId = conversationIdMap[currentChatId.value] || undefined
     const { data } = await apiAsk(text, docId || undefined, convId)
     if (data) {
-      // 保存后端返回的 conversationId，保证后续消息归属同一会话
       if (data.conversationId && !conversationIdMap[currentChatId.value]) {
         conversationIdMap[currentChatId.value] = data.conversationId
       }
       answer = {
-        content: renderMarkdown(data.answer || data.content || ''),
+        content: await renderMarkdown(data.answer || data.content || ''),
         citations: (data.citations || data.references || []).map(c => ({
           doc: c.title || c.doc || '',
           location: c.location || c.department || '',
@@ -477,7 +472,7 @@ async function sendMessage(question) {
   }
 
   thinking.value = false
-  messages.value.push({
+  msgs.push({
     role: 'ai',
     content: answer.content,
     citations: answer.citations
@@ -505,19 +500,35 @@ async function scrollToBottom() {
   }
 }
 
-onMounted(() => {
-  // 入场动画：三栏依次滑入
-  nextTick(() => {
-    gsap.from('.chat-layout > .sidebar', { x: -20, opacity: 0, duration: 0.45, ease: 'power2.out' })
-    gsap.from('.chat-layout > .chat-main', { y: 16, opacity: 0, duration: 0.45, ease: 'power2.out', delay: 0.08 })
-    gsap.from('.chat-layout > .ref-panel', { x: 20, opacity: 0, duration: 0.45, ease: 'power2.out', delay: 0.15 })
-  })
+async function loadConversations() {
+  try {
+    const { data } = await getConversationList()
+    const convList = Array.isArray(data) ? data : (data?.list || data?.conversations || [])
+    if (!convList.length) return
 
-  // 后台异步加载会话历史，不阻塞页面渲染
+    const sorted = [...convList].sort((a, b) => {
+      const ta = a.updatedAt || a.updated_at || a.lastMessageTime || a.createdAt || a.created_at || ''
+      const tb = b.updatedAt || b.updated_at || b.lastMessageTime || b.createdAt || b.created_at || ''
+      return new Date(tb).getTime() - new Date(ta).getTime()
+    })
+
+    sorted.forEach(conv => {
+      chatIdCounter++
+      const localId = chatIdCounter
+      chatStore[localId] = []
+      chatHistory.value.push({ id: localId, title: conv.title || '新会话' })
+      conversationIdMap[localId] = conv.id || conv.conversationId || conv.conversation_id
+      messagesLoaded[localId] = false
+    })
+  } catch (e) {
+    console.warn('加载历史会话失败:', e.message)
+  }
+}
+
+onMounted(() => {
   loadConversations()
 
   if (route.query.q) {
-    startNewChat()
     const q = route.query.q.trim()
     if (route.query.docId) {
       sendMessage('请根据《' + q + '》的内容，总结其主要条款和要点')
@@ -526,33 +537,6 @@ onMounted(() => {
     }
   }
 })
-
-async function loadConversations() {
-  try {
-    const { data } = await getConversationList()
-    const convList = Array.isArray(data) ? data : (data?.list || data?.conversations || [])
-    if (convList.length > 0) {
-      // 按更新时间倒序排列（最新在上）
-      const sorted = [...convList].sort((a, b) => {
-        const ta = a.updatedAt || a.updated_at || a.lastMessageTime || a.createdAt || a.created_at || ''
-        const tb = b.updatedAt || b.updated_at || b.lastMessageTime || b.createdAt || b.created_at || ''
-        return new Date(tb).getTime() - new Date(ta).getTime()
-      })
-      chatHistory.value = []
-      chatIdCounter = 0
-      sorted.forEach(conv => {
-        chatIdCounter++
-        const localId = chatIdCounter
-        chatStore[localId] = []
-        chatHistory.value.push({ id: localId, title: conv.title || '新会话' })
-        conversationIdMap[localId] = conv.id || conv.conversationId || conv.conversation_id
-        messagesLoaded[localId] = false
-      })
-    }
-  } catch (e) {
-    console.warn('加载会话列表失败:', e.message)
-  }
-}
 </script>
 
 <style scoped>
@@ -578,6 +562,12 @@ async function loadConversations() {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  animation: chatSidebarIn 0.45s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+@keyframes chatSidebarIn {
+  from { opacity: 0; transform: translateX(-20px); }
+  to   { opacity: 1; transform: translateX(0); }
 }
 
 .new-chat-btn {
@@ -593,7 +583,9 @@ async function loadConversations() {
   color: var(--text-secondary);
   font-size: 0.88rem;
   font-weight: 500;
+  cursor: pointer;
   transition: all var(--transition-fast);
+  font-family: inherit;
 }
 
 .new-chat-btn:hover {
@@ -682,6 +674,12 @@ async function loadConversations() {
   flex-direction: column;
   overflow: hidden;
   min-width: 0;
+  animation: chatMainIn 0.45s 0.08s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+@keyframes chatMainIn {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 .chat-messages {
@@ -690,6 +688,24 @@ async function loadConversations() {
   padding: 24px 32px;
   scroll-behavior: smooth;
 }
+
+.chat-loading-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 0;
+}
+
+.chat-loading-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
 
 /* 欢迎界面 */
 .welcome {
@@ -757,9 +773,9 @@ async function loadConversations() {
   justify-content: center;
 }
 
-/* 用户消息：靠右 */
+/* 用户消息：与AI回答共用居中容器，气泡在容器内右对齐 */
 .msg-wrap.user {
-  justify-content: flex-end;
+  justify-content: center;
 }
 
 @keyframes msgIn {
@@ -793,6 +809,7 @@ async function loadConversations() {
   color: var(--text);
   font-size: 0.9375rem;
   line-height: 1.7;
+  text-align: left;
 }
 
 /* 思考中的动态点点 */
@@ -1019,6 +1036,12 @@ async function loadConversations() {
   background: var(--bg-cool);
   padding: 20px;
   overflow-y: auto;
+  animation: chatRefIn 0.45s 0.15s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+@keyframes chatRefIn {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
 }
 
 .ref-header {

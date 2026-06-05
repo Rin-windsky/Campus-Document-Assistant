@@ -78,6 +78,24 @@ export function reparseDocument(id) {
   return http.post(`/document/${id}/reparse`)
 }
 
+/** 获取后端存储的文档文件（需登录，120s 超时，支持下载进度回调） */
+export function fetchDocumentFile(id, onProgress) {
+  return http.get(`/document/${id}/file`, {
+    responseType: 'blob',
+    timeout: 120000,
+    onDownloadProgress: (evt) => {
+      if (evt.total && onProgress) {
+        onProgress(Math.round((evt.loaded / evt.total) * 100))
+      }
+    },
+  })
+}
+
+/** 获取文档预览短效 token（用于 iframe 直链鉴权） */
+export function getDocumentPreviewToken(id) {
+  return http.get(`/document/${id}/preview-token`)
+}
+
 /* ==============================
    Search 检索
    ============================== */

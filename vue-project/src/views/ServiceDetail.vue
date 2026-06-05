@@ -1,7 +1,5 @@
 <template>
   <div class="detail-page">
-    <Navbar />
-
     <div class="page-content">
       <div class="container">
         <button ref="backBtnRef" class="back-btn" @click="router.push('/service')">
@@ -89,7 +87,6 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import Navbar from '../components/Navbar.vue'
 import { useTodoStore } from '../stores/todo'
 import { gsap } from '../plugins/gsap'
 

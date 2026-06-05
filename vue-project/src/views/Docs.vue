@@ -1,10 +1,8 @@
 <template>
   <div class="docs-page">
-    <Navbar />
-
     <div class="docs-layout">
       <!-- 左侧分类导航 -->
-      <aside class="docs-sidebar card">
+      <aside class="docs-sidebar card" :class="{ 'anim-shell': shellAnim }">
         <div class="sidebar-title">文档分类</div>
         <nav class="category-nav">
           <button
@@ -40,7 +38,7 @@
       <!-- 中间文档列表 -->
       <main class="docs-main">
         <!-- 搜索栏 -->
-        <div class="docs-search-bar">
+        <div class="docs-search-bar" :class="{ 'anim-shell': shellAnim }">
           <div class="docs-search-input">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="11" cy="11" r="8"/>
@@ -80,7 +78,7 @@
         </div>
 
         <!-- 结果计数 -->
-        <div class="docs-result-info">
+        <div class="docs-result-info" :class="{ 'anim-shell': shellAnim }">
           <template v-if="loadingDocs">
             正在加载文档列表…
           </template>
@@ -94,9 +92,11 @@
         <!-- 文档列表 -->
         <div :class="['docs-grid', viewMode]">
           <article
-            v-for="doc in filteredDocs"
+            v-for="(doc, index) in filteredDocs"
             :key="doc.id"
             class="doc-card card card-clickable"
+            :class="{ 'anim-card': cardAnim }"
+            :style="{ '--i': index }"
             @click="selectedDoc = doc"
           >
             <div class="doc-card-header">
@@ -159,15 +159,56 @@
               </div>
               <div class="pdf-divider"></div>
 
-              <!-- 加载中 -->
-              <div v-if="previewLoading" class="preview-loading">
-                <div class="progress-spinner"></div>
-                <p>正在加载文档内容...</p>
+              <!-- ★ 即时文本预览：后端已解析，毫秒级展示 -->
+              <div v-if="previewText" class="preview-text-content preview-quick-text">
+                <div class="quick-text-label">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/>
+                  </svg>
+                  文档内容速览
+                </div>
+                <p>{{ previewText.slice(0, 3000) }}</p>
+                <p v-if="previewText.length > 3000" class="text-truncated">… 内容已截断，请下载原文查看完整内容</p>
               </div>
 
-              <!-- PDF iframe 真实预览 -->
-              <div v-else-if="isPDF" class="preview-iframe-wrap">
-                <iframe :src="selectedDoc.file" class="preview-iframe" :title="selectedDoc.title"></iframe>
+              <!-- 文档原文加载中 -->
+              <div v-if="previewLoading" class="preview-loading preview-loading-compact">
+                <div class="progress-spinner"></div>
+                <p>{{ previewDownloadPct > 0 ? `正在加载原文（${previewDownloadPct}%）…` : '正在加载文档原文...' }}</p>
+                <div v-if="previewDownloadPct > 0" class="download-progress-bar">
+                  <div class="download-progress-fill" :style="{ width: previewDownloadPct + '%' }"></div>
+                </div>
+              </div>
+
+              <!-- 预览错误（带重试） -->
+              <div v-else-if="previewError" class="preview-error">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <p>{{ previewError }}</p>
+                <button class="btn btn-outline retry-btn" @click.stop="selectedDoc = { ...selectedDoc }">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                  </svg>
+                  重新加载
+                </button>
+              </div>
+
+              <!-- PDF / HTML iframe 直链预览 -->
+              <div v-else-if="(isPDF || isHTML) && pdfPreviewSrc" class="preview-iframe-wrap">
+                <div v-if="iframeLoading" class="iframe-loading-overlay">
+                  <div class="progress-spinner"></div>
+                  <p>{{ previewDownloadPct > 0 ? `正在下载文档（${previewDownloadPct}%）…` : '正在加载文档...' }}</p>
+                  <div v-if="previewDownloadPct > 0" class="download-progress-bar" style="width: 60%; max-width: 280px;">
+                    <div class="download-progress-fill" :style="{ width: previewDownloadPct + '%' }"></div>
+                  </div>
+                </div>
+                <iframe
+                  :src="pdfPreviewSrc"
+                  class="preview-iframe"
+                  :title="selectedDoc.title"
+                  @load="iframeLoading = false"
+                ></iframe>
               </div>
 
               <!-- DOCX HTML 预览 -->
@@ -180,14 +221,8 @@
                 <div class="preview-xlsx-content" v-html="previewHtml"></div>
               </div>
 
-              <!-- 纯文本预览（导入的无文件文档） -->
-              <div v-else-if="previewText" class="preview-text-content">
-                <p>{{ previewText.slice(0, 4000) }}</p>
-                <p v-if="previewText.length > 4000" class="text-truncated">… 内容已截断，请下载原文查看完整内容</p>
-              </div>
-
               <!-- 无法预览的格式 -->
-              <div v-else class="preview-unavailable">
+              <div v-else-if="!previewText" class="preview-unavailable">
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                   <polyline points="14 2 14 8 20 8"/>
@@ -204,7 +239,15 @@
         </div>
 
         <div class="preview-actions">
-          <a v-if="isPDF" :href="selectedDoc.file" target="_blank" class="btn btn-outline">
+          <button v-if="(isPDF || isHTML) && selectedDoc.backendFile" class="btn btn-outline" @click="openPdfInNewTab">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+              <polyline points="15 3 21 3 21 9"/>
+              <line x1="10" y1="14" x2="21" y2="3"/>
+            </svg>
+            在新窗口打开
+          </button>
+          <a v-else-if="(isPDF || isHTML) && selectedDoc.file" :href="selectedDoc.file" target="_blank" class="btn btn-outline">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
               <polyline points="15 3 21 3 21 9"/>
@@ -212,7 +255,15 @@
             </svg>
             在新窗口打开
           </a>
-          <a v-if="selectedDoc.file" :href="selectedDoc.file" class="btn btn-outline" download>
+          <button v-if="selectedDoc.backendFile" class="btn btn-outline" @click="downloadBackendDoc(selectedDoc)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            下载原文
+          </button>
+          <a v-else-if="selectedDoc.file" :href="selectedDoc.file" class="btn btn-outline" download>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
               <polyline points="7 10 12 15 17 10"/>
@@ -312,14 +363,14 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+defineOptions({ name: 'Docs' })
+import { ref, computed, onMounted, onActivated, onDeactivated, onUnmounted, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import Navbar from '../components/Navbar.vue'
-import { uploadDocument, getDocumentList, deleteDocument } from '../api/index.js'
-import { getDefaultDocs, getDocText, getDOCXHtml, getXLSXHtml } from '../services/knowledgeBase.js'
+import { uploadDocument, getDocumentList, getDocumentDetail, deleteDocument, fetchDocumentFile, getDocumentPreviewToken } from '../api/index.js'
+import { downloadFile, buildDocumentFileUrl } from '../api/request.js'
+import { getDefaultDocs, getAllDocs, saveAllDocs, getDocText, getDOCXHtml, getXLSXHtml } from '../services/knowledgeBase.js'
 import { useAuthStore } from '../stores/auth.js'
 import { useNotificationStore } from '../stores/notification'
-import { gsap } from '../plugins/gsap'
 
 const router = useRouter()
 const route = useRoute()
@@ -331,9 +382,19 @@ const activeDepts = ref([])
 const viewMode = ref('grid')
 const selectedDoc = ref(null)
 const previewLoading = ref(false)
+const iframeLoading = ref(false)
 const previewText = ref('')
 const previewHtml = ref('')
+const previewBlobUrl = ref('')
+const previewDirectUrl = ref('')       // 预览 token 直链（浏览器流式加载）
+const previewError = ref('')
+const previewDownloadPct = ref(0)
 const loadingDocs = ref(true)
+const shellAnim = ref(false)
+const cardAnim = ref(false)
+
+// Blob 缓存：避免重复下载同一文档
+const blobCache = new Map()
 const showImport = ref(false)
 const importing = ref(false)
 const importFiles = ref([])
@@ -375,6 +436,14 @@ const defaultDocMap = new Map(
 function mapBackendDoc(doc) {
   const defaultMeta = defaultDocMap.get(doc.fileName) || {}
   const ext = (doc.fileName || '').split('.').pop().toLowerCase()
+  // 后端返回的文件URL（可能是相对路径或完整URL）
+  const backendFileUrl = doc.fileUrl || doc.filePath || doc.url || doc.downloadUrl || null
+  const hasLocalFile = !!defaultMeta.file
+  let fileUrl = defaultMeta.file || null
+  // 如果后端给了文件URL，优先使用
+  if (!fileUrl && backendFileUrl) {
+    fileUrl = backendFileUrl.startsWith('http') ? backendFileUrl : backendFileUrl
+  }
   return {
     id: doc.id,
     title: (doc.fileName || '').replace(/\.[^.]+$/, ''),
@@ -386,7 +455,9 @@ function mapBackendDoc(doc) {
     category: defaultMeta.category || '校园通知',
     tags: defaultMeta.tags || [],
     description: defaultMeta.description || '',
-    file: defaultMeta.file || null,  // 本地预览路径（仅默认文档有）
+    file: fileUrl,  // 文件URL（默认文档用本地路径，导入文档用后端路径）
+    backendFile: !hasLocalFile && !!doc.id,  // 标记是否需要从后端 Blob 加载
+    textContent: doc.textContent || defaultMeta.textContent || '',  // 后端解析出的文本内容
     status: doc.status || 'UNKNOWN'
   }
 }
@@ -397,30 +468,50 @@ async function loadDocs() {
     const { data } = await getDocumentList({ size: 100 })
     const list = data?.list || data || []
     allDocs.value = Array.isArray(list) ? list.map(mapBackendDoc) : []
-  } catch {
-    allDocs.value = getDefaultDocs()
+    saveAllDocs(allDocs.value)
+  } catch (err) {
+    console.error('[Docs] 加载文档列表失败:', err.message)
+    const cached = getAllDocs()
+    allDocs.value = cached.length > 0 ? cached : getDefaultDocs()
   } finally {
     loadingDocs.value = false
   }
 }
 
 onMounted(() => {
-  // 入场动画：侧边栏 + 搜索栏依次滑入
-  nextTick(() => {
-    gsap.from('.docs-layout > .docs-sidebar', { x: -20, opacity: 0, duration: 0.45, ease: 'power2.out' })
-    gsap.from('.docs-search-bar', { y: -12, opacity: 0, duration: 0.4, ease: 'power2.out', delay: 0.08 })
-    gsap.from('.docs-result-info', { y: -8, opacity: 0, duration: 0.35, ease: 'power2.out', delay: 0.15 })
-  })
   loadDocs()
+
+  // 后台预加载文档解析库，避免首次点击 DOCX/XLSX 时等待
+  import('mammoth')
+  import('xlsx')
+})
+
+// ---- CSS 入场动画（每次激活重播） ----
+function triggerAnims() {
+  nextTick(() => {
+    shellAnim.value = true
+    if (!loadingDocs.value) {
+      cardAnim.value = true
+    }
+  })
+}
+
+onActivated(() => {
+  shellAnim.value = false
+  cardAnim.value = false
+  triggerAnims()
+})
+
+onDeactivated(() => {
+  shellAnim.value = false
+  cardAnim.value = false
 })
 
 // 文档加载完成后卡片交错淡入 + 自动选中 URL 参数指定的文档
 watch(loadingDocs, (val) => {
   if (!val) {
     nextTick(() => {
-      gsap.from('.doc-card', {
-        y: 20, opacity: 0, stagger: 0.04, duration: 0.4, ease: 'power2.out'
-      })
+      cardAnim.value = true
       // 从聊天页引用跳转过来时，自动打开对应文档（模糊匹配）
       const docQuery = route.query.doc
       if (docQuery) {
@@ -472,8 +563,22 @@ function filterDocs() { /* computed 自动处理 */ }
 
 const isPDF = computed(() => {
   if (!selectedDoc.value) return false
-  const f = selectedDoc.value.file || ''
-  return f.toLowerCase().endsWith('.pdf')
+  const doc = selectedDoc.value
+  const f = doc.file || ''
+  return f.toLowerCase().endsWith('.pdf') || doc.format === 'pdf'
+})
+
+const isHTML = computed(() => {
+  if (!selectedDoc.value) return false
+  const ext = (selectedDoc.value.format || '').toLowerCase()
+  return ext === 'html' || ext === 'htm'
+})
+
+const pdfPreviewSrc = computed(() => {
+  if (!selectedDoc.value) return ''
+  if (previewDirectUrl.value) return previewDirectUrl.value
+  if (previewBlobUrl.value) return previewBlobUrl.value
+  return selectedDoc.value.file || ''
 })
 
 const isDOCX = computed(() => {
@@ -492,36 +597,173 @@ const isXLSX = computed(() => {
   return ext.endsWith('.xlsx') || ext.endsWith('.xls')
 })
 
+function clearPreviewBlob() {
+  if (previewBlobUrl.value) {
+    URL.revokeObjectURL(previewBlobUrl.value)
+    previewBlobUrl.value = ''
+  }
+  previewDirectUrl.value = ''
+  previewDownloadPct.value = 0
+}
+
+async function loadBackendFileBlob(doc, onProgress) {
+  const cacheKey = `blob_${doc.id}`
+  if (blobCache.has(cacheKey)) {
+    if (onProgress) onProgress(100)
+    return blobCache.get(cacheKey)
+  }
+  const { data } = await fetchDocumentFile(doc.id, onProgress)
+  blobCache.set(cacheKey, data)
+  return data
+}
+
+async function downloadBackendDoc(doc) {
+  const fileName = doc.title + '.' + doc.format
+  await downloadFile(`/document/${doc.id}/file`, fileName)
+}
+
+function openPdfInNewTab() {
+  const url = pdfPreviewSrc.value
+  if (url) window.open(url, '_blank')
+}
+
+// 请求版本号：防止快速切换文档时旧响应覆盖新状态
+let previewReqId = 0
+
 watch(selectedDoc, async (doc) => {
   previewText.value = ''
   previewHtml.value = ''
-  if (!doc) return
-  // 有文件 URL 的 PDF 直接用 iframe 预览，无需加载文本
-  if (doc.file && doc.file.toLowerCase().endsWith('.pdf')) return
-
-  previewLoading.value = true
-  try {
-    const ext = (doc.file || '').toLowerCase()
-    if (ext.endsWith('.docx') || ext.endsWith('.doc')) {
-      const html = await getDOCXHtml(doc.file)
-      if (html) {
-        previewHtml.value = html
-      } else {
-        // mammoth 解析失败（如旧版 .doc 格式），回退到纯文本
-        const text = await getDocText(doc)
-        previewText.value = text || ''
-      }
-    } else if (ext.endsWith('.xlsx') || ext.endsWith('.xls')) {
-      previewHtml.value = await getXLSXHtml(doc.file)
-    } else {
-      const text = await getDocText(doc)
-      previewText.value = text || ''
-    }
-  } catch {
-    previewText.value = ''
-    previewHtml.value = ''
-  }
+  previewError.value = ''
+  iframeLoading.value = false
   previewLoading.value = false
+  clearPreviewBlob()
+  if (!doc) return
+
+  // ★ 立即填充文本（后端已解析 textContent，毫秒级展示）
+  if (doc.textContent) {
+    previewText.value = doc.textContent.slice(0, 3000)
+    if (doc.textContent.length > 3000) {
+      previewText.value += '\n\n… 内容已截断，请下载原文查看完整内容'
+    }
+  }
+
+  const myReqId = ++previewReqId
+  const isLatest = () => myReqId === previewReqId
+  const ext = (doc.format || (doc.file || '').split('.').pop() || '').toLowerCase()
+
+  // ── 本地静态文件直接交给 iframe ──
+  if (doc.file && !doc.backendFile && (ext === 'pdf' || ext === 'html' || ext === 'htm')) {
+    iframeLoading.value = true
+    return
+  }
+
+  // ── 后端 PDF / HTML：优先用预览 token 生成直链（流式加载，秒开） ──
+  if (doc.backendFile && doc.id && (ext === 'pdf' || ext === 'html' || ext === 'htm')) {
+    previewLoading.value = true
+    iframeLoading.value = true
+    let token = null
+    try {
+      const tokenRes = await Promise.race([
+        getDocumentPreviewToken(doc.id),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('token_timeout')), 5000))
+      ])
+      token = tokenRes?.data?.token || tokenRes?.data
+    } catch { /* token 接口超时，走下方 Blob 回退 */ }
+    if (token && isLatest()) {
+      previewDirectUrl.value = buildDocumentFileUrl(doc.id, token)
+      previewLoading.value = false
+      return
+    }
+    // 回退：下载完整文件为 Blob（120s 超时，显示进度）
+    previewDownloadPct.value = 0
+    try {
+      const blob = await loadBackendFileBlob(doc, (pct) => {
+        if (isLatest()) previewDownloadPct.value = pct
+      })
+      if (!isLatest()) return
+      previewBlobUrl.value = URL.createObjectURL(blob)
+      iframeLoading.value = true
+    } catch (err) {
+      if (!isLatest()) return
+      previewError.value = `文档加载失败：${err.message || '网络异常'}`
+    }
+    if (isLatest()) previewLoading.value = false
+    return
+  }
+
+  // ── DOCX / XLSX ──
+  previewLoading.value = true
+  previewDownloadPct.value = 0
+  try {
+    if (doc.backendFile) {
+      const blob = await loadBackendFileBlob(doc, (pct) => {
+        if (isLatest()) previewDownloadPct.value = pct
+      })
+      if (!isLatest()) return
+      if (ext === 'docx' || ext === 'doc') {
+        const html = await getDOCXHtml(blob)
+        if (!isLatest()) return
+        if (html) { previewHtml.value = html }
+        else { previewText.value = (await getDocText(doc)) || '' }
+        previewLoading.value = false
+        return
+      }
+      if (ext === 'xlsx' || ext === 'xls') {
+        const html = await getXLSXHtml(blob)
+        if (!isLatest()) return
+        previewHtml.value = html
+        previewLoading.value = false
+        return
+      }
+    }
+    // 本地文件
+    if (ext === 'docx' || ext === 'doc') {
+      const html = doc.file ? await getDOCXHtml(doc.file) : null
+      if (!isLatest()) return
+      if (html) { previewHtml.value = html }
+      else { previewText.value = (await getDocText(doc)) || '' }
+    } else if (ext === 'xlsx' || ext === 'xls') {
+      const html = doc.file ? await getXLSXHtml(doc.file) : null
+      if (!isLatest()) return
+      if (html) { previewHtml.value = html }
+      else { previewText.value = (await getDocText(doc)) || '' }
+    } else {
+      previewText.value = (await getDocText(doc)) || ''
+    }
+    // 无内容则从后端详情补拉
+    if (!isLatest()) return
+    if (!previewText.value && !previewHtml.value && doc.id) {
+      try {
+        const { data } = await getDocumentDetail(doc.id)
+        if (!isLatest()) return
+        if (data) {
+          doc.textContent = data.textContent || data.content || data.text || ''
+          doc.file = doc.file || data.fileUrl || data.filePath || data.url || ''
+          if (doc.textContent) {
+            previewText.value = doc.textContent.slice(0, 3000)
+            if (doc.textContent.length > 3000) previewText.value += '\n\n… 内容已截断，请下载原文查看完整内容'
+          }
+        }
+      } catch { /* 静默 */ }
+    }
+    if (!isLatest()) return
+    if (!previewText.value && !previewHtml.value) {
+      previewError.value = '暂无可预览内容，请尝试下载原文查看'
+    }
+  } catch (err) {
+    if (!isLatest()) return
+    previewError.value = `文档加载失败：${err.message || '网络异常'}`
+  } finally {
+    if (isLatest()) {
+      previewLoading.value = false
+      previewDownloadPct.value = 0
+    }
+  }
+})
+
+onUnmounted(() => {
+  clearPreviewBlob()
+  blobCache.clear()
 })
 
 function toggleDept(dept) {
@@ -622,6 +864,38 @@ function onDrop(e) {
   display: flex;
   flex-direction: column;
   background: var(--bg);
+}
+
+/* ===== 入场动画 ===== */
+@keyframes sidebarIn {
+  from { transform: translateX(-20px); opacity: 0; }
+  to   { transform: translateX(0);     opacity: 1; }
+}
+@keyframes searchIn {
+  from { transform: translateY(-12px); opacity: 0; }
+  to   { transform: translateY(0);     opacity: 1; }
+}
+@keyframes infoIn {
+  from { transform: translateY(-8px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+@keyframes cardUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+.docs-sidebar.anim-shell {
+  animation: sidebarIn 0.45s ease-out backwards;
+}
+.docs-search-bar.anim-shell {
+  animation: searchIn 0.4s ease-out 0.08s backwards;
+}
+.docs-result-info.anim-shell {
+  animation: infoIn 0.35s ease-out 0.15s backwards;
+}
+.doc-card.anim-card {
+  animation: cardUp 0.4s ease-out backwards;
+  animation-delay: calc(var(--i, 0) * 0.04s);
 }
 
 .docs-layout {
@@ -1116,6 +1390,102 @@ function onDrop(e) {
   border-width: 2px;
 }
 
+/* 下载进度条 */
+.download-progress-bar {
+  width: 80%;
+  max-width: 320px;
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  margin: 10px auto 0;
+  overflow: hidden;
+}
+.download-progress-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+/* 预览错误 */
+.preview-error {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-tertiary);
+}
+.preview-error svg { margin-bottom: 10px; color: #E6A23C; }
+.preview-error p {
+  font-size: 0.85rem;
+  margin-bottom: 12px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  word-break: break-word;
+}
+.retry-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 18px;
+  font-size: 0.82rem;
+  margin-top: 4px;
+}
+
+/* 紧凑型加载 */
+.preview-loading-compact {
+  padding: 24px 20px !important;
+}
+.preview-loading-compact .progress-spinner {
+  width: 22px !important;
+  height: 22px !important;
+  border-width: 2px !important;
+  margin-bottom: 8px !important;
+}
+
+/* 即时文本速览 */
+.preview-quick-text {
+  background: linear-gradient(135deg, #fdfcf8 0%, #faf7f0 100%);
+  border: 1px solid #ede4d3;
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  max-height: 240px;
+  animation: quickTextIn 0.3s ease-out;
+}
+@keyframes quickTextIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.quick-text-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #9b7d4c;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 8px;
+  padding: 2px 10px;
+  background: rgba(155, 125, 76, 0.08);
+  border-radius: 4px;
+}
+.quick-text-label svg { flex-shrink: 0; opacity: 0.7; }
+
+/* iframe 加载遮罩 */
+.iframe-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: rgba(255, 255, 255, 0.92);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+.iframe-loading-overlay p { font-size: 0.82rem; color: var(--text-tertiary); }
+.iframe-loading-overlay .progress-spinner { margin: 0; }
+
 .preview-iframe-wrap {
   width: 100%;
   height: 460px;
@@ -1123,6 +1493,7 @@ function onDrop(e) {
   border-radius: 4px;
   overflow: hidden;
   background: #fff;
+  position: relative;
 }
 
 .preview-iframe {
